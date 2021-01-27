@@ -1,0 +1,62 @@
+#Step 1: generate a summary table for each file, this assumes one individual per file (and ignores all other IDs) and requires some metadata about each trial
+
+meta<-read.csv("/Metadata.csv") #this is where I have useful information regarding the start and end time of my corresponding metabolic trial, the temperatures of those trials, etc
+
+setwd("/PIT_tag")
+files = dir(pattern=".txt")
+dir.create("Plots")
+
+#First generate a summary of each file and store it in data frame output. It will include the time and duration for each trial, the Start and End temps, the number of samples collected, and when a 10% loss in body temp occurred
+output <- data.frame(sub(".txt", "", sub("*\\d*\\w\\w\\w2017_PIT_", "", files))) #this is going to depend on what naming scheme you used for your files
+names(output) <- "Filename"
+output$Start_Time<-NA
+output$Start_Temp<-NA
+output$Duration<-NA
+output$End_Temp<-NA
+output$Num_sample<-NA
+output$Loss10<-NA
+
+for (i in 1:length(files)){
+	print(files[i])
+	file = read.table(files[i], col.names=c("Date","Time","AO","Tag","Tag_ID","Lat", "LatN", "Long", "LongW", "Temp"), fill=TRUE)
+	Tag = file$Tag_ID[1]
+	if (length(levels(file$Tag_ID))>1) {
+		file = file[file$Tag_ID==Tag | file$Tag_ID==sub("\\*", "",as.character(Tag)),] #remove other tags in file
+	}
+  #the clocks on the PIT tag reader and my laptop were slightly off, so the times that I recorded for starting and ending trials dont match up exactly with what the PIT tag reader recorded
+	file$min_since_start = difftime(strptime(file$Time, "%H:%M:%S"), strptime(file$Time[1], "%H:%M:%S"), units="mins") 
+	SMR_start = meta$SMR3_maxstart[meta$Combo==sub(".txt", "", sub("\\d+\\w+2017_PIT_", "", files[i]))]/60
+	SMR_end = meta$SMR3_maxend[meta$Combo==sub(".txt", "", sub("\\d+\\w+2017_PIT_", "", files[i]))]/60
+	#Plot the temp data
+  pdf(paste("Plots/", sub(".txt", "", sub("*\\d*\\w\\w\\w2017_PIT_", "", files[i])), ".pdf"))
+		plot(file$Temp~file$min_since_start, type="l", xlab="Time From Start (in mins)", ylab="Temp (deg C)")
+		abline(h=file$Temp[1]*0.90, col="red") #line for 10% of starting temp
+		abline(h=37, col="red", lty=2) #line for 37 deg C
+		abline(v=seq(from=SMR_start, to=SMR_end, by =0.1), col="gray") #where does VO2max occur (if you know this)
+		dev.off()
+	output$Start_Time[i]<-as.character(file$Time[1])
+	output$Start_Temp[i]<-file$Temp[1]
+	output$Duration[i]<- as.numeric(difftime(strptime(file$Time[nrow(file)], "%H:%M:%S"), strptime(file$Time[1], "%H:%M:%S"), units="mins"))
+	output$End_Temp[i]<-file$Temp[nrow(file)]
+	output$Num_sample[i] <- nrow(file)
+	#Calculate average temperature per second (~8 readings per second)	
+	data = data.frame(unique(file$Time)); names(data)="Time"
+	data$meanTemp = NA
+	for (j in 1:length(unique(file$Time))){
+		data$meanTemp[j] = mean(file$Temp[file$Time==unique(file$Time)[j]], na.rm=TRUE)
+	}
+	data$min_since_start = as.numeric(difftime(strptime(data$Time, "%H:%M"),strptime(data$Time[1], "%H:%M"), units="mins"))
+	output$Loss10[i] <- data$min_since_start[min(which(data$meanTemp < file$Temp[1]*0.90))]	
+	#Average temperature per minute
+	data2 = data.frame(seq(0,max(data$min_since_start))); names(data2)="Time" #create new df by min
+	data2$ID = sub(".txt", "", sub("*\\d*\\w\\w\\w2017_PIT_", "", files[i]))
+	data2$meanTemp = NA
+	for (k in 1:nrow(data2)){		
+		data2$meanTemp[k] = mean(data$meanTemp[data$min_since_start==data2$Time[k]], na.rm=TRUE)
+		data2$Hypothermic[k] = data2$meanTemp[k] < file$Temp[1]*0.90 #when does temp fall 10%
+		data2$Hypothermic_37[k] = data2$meanTemp[k] < 36.95 #when does temp fall below 37
+	}
+	write.table(data2, "coxph_data.csv", append=TRUE, row.names=FALSE, col.names=FALSE, sep=",") #export for coxph
+}
+output$Rate_of_change <- (output$Start_Temp-output$End_Temp)/output$Duration #rate of change throughout trial
+write.csv(output, "output.csv")

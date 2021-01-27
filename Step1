@@ -7,7 +7,7 @@ setwd("/PIT_tag")
 files = dir(pattern=".txt")
 dir.create("Plots")
 
-#First generate a summary of each file and store it in data frame output. It will include the time and duration for each trial, the Start and End temps, the number of samples collected, and when a 10% loss in body temp occurred
+#First make a blank data frame for the output. It will include the time and duration for each trial, the Start and End temps, the number of samples collected, and when a 10% loss in body temp occurred
 output <- data.frame(sub(".txt", "", sub("*\\d*\\w\\w\\w2017_PIT_", "", files))) #this is going to depend on what naming scheme you used for your files
 names(output) <- "Filename"
 output$Start_Time<-NA

@@ -19,16 +19,18 @@ output$Loss10<-NA
 for (i in 1:length(files)){
 	print(files[i])
 	file = read.table(files[i], col.names=c("Date","Time","AO","Tag","Tag_ID","Lat", "LatN", "Long", "LongW", "Temp"), fill=TRUE)
-	Tag = file$Tag_ID[1]
+	Tag = file$Tag_ID[1] #focus on first tag in the file
 	if (length(levels(file$Tag_ID))>1) {
 		file = file[file$Tag_ID==Tag | file$Tag_ID==sub("\\*", "",as.character(Tag)),] #remove other tags in file
 	}
-  #the clocks on the PIT tag reader and my laptop were slightly off, so the times that I recorded for starting and ending trials dont match up exactly with what the PIT tag reader recorded
+ 	
+	#the clocks on the PIT tag reader and my laptop were slightly off, so the times that I recorded for starting and ending trials dont match up exactly with what the PIT tag reader recorded
 	file$min_since_start = difftime(strptime(file$Time, "%H:%M:%S"), strptime(file$Time[1], "%H:%M:%S"), units="mins") 
 	SMR_start = meta$SMR3_maxstart[meta$Combo==sub(".txt", "", sub("\\d+\\w+2017_PIT_", "", files[i]))]/60
 	SMR_end = meta$SMR3_maxend[meta$Combo==sub(".txt", "", sub("\\d+\\w+2017_PIT_", "", files[i]))]/60
+	
 	#Plot the temp data
-  pdf(paste("Plots/", sub(".txt", "", sub("*\\d*\\w\\w\\w2017_PIT_", "", files[i])), ".pdf"))
+  	pdf(paste("Plots/", sub(".txt", "", sub("*\\d*\\w\\w\\w2017_PIT_", "", files[i])), ".pdf"))
 		plot(file$Temp~file$min_since_start, type="l", xlab="Time From Start (in mins)", ylab="Temp (deg C)")
 		abline(h=file$Temp[1]*0.90, col="red") #line for 10% of starting temp
 		abline(h=37, col="red", lty=2) #line for 37 deg C
@@ -39,6 +41,7 @@ for (i in 1:length(files)){
 	output$Duration[i]<- as.numeric(difftime(strptime(file$Time[nrow(file)], "%H:%M:%S"), strptime(file$Time[1], "%H:%M:%S"), units="mins"))
 	output$End_Temp[i]<-file$Temp[nrow(file)]
 	output$Num_sample[i] <- nrow(file)
+	
 	#Calculate average temperature per second (~8 readings per second)	
 	data = data.frame(unique(file$Time)); names(data)="Time"
 	data$meanTemp = NA
@@ -47,7 +50,8 @@ for (i in 1:length(files)){
 	}
 	data$min_since_start = as.numeric(difftime(strptime(data$Time, "%H:%M"),strptime(data$Time[1], "%H:%M"), units="mins"))
 	output$Loss10[i] <- data$min_since_start[min(which(data$meanTemp < file$Temp[1]*0.90))]	
-	#Average temperature per minute
+	
+	#Calculate average temperature per minute
 	data2 = data.frame(seq(0,max(data$min_since_start))); names(data2)="Time" #create new df by min
 	data2$ID = sub(".txt", "", sub("*\\d*\\w\\w\\w2017_PIT_", "", files[i]))
 	data2$meanTemp = NA

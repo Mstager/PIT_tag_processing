@@ -1,5 +1,5 @@
-#Step 1: generate a summary table for each file, this assumes one individual per file (and ignores all other IDs)
-#This is not super necessary but I just find it useful to identify weird stuff
+#Step 1: calculate per minute temp averages for each file, this assumes one individual per file (and ignores all other IDs)
+#Also, generate a summary table for each file. This is not super necessary but I just find it useful to identify weird stuff.
 
 setwd("/PIT_tag")
 files = dir(pattern=".txt")

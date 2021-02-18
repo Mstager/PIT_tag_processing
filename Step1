@@ -6,7 +6,7 @@ files = dir(pattern=".txt")
 dir.create("Plots")
 
 #First make a blank data frame for the output. It will include the time and duration for each trial, the Start and End temps, the number of samples collected, and when a 10% loss in body temp occurred
-output <- data.frame(sub(".txt", "", sub("*\\d*\\w\\w\\w2017_PIT_", "", files))) #this is going to depend on what naming scheme you used for your files
+output <- data.frame(sub(".txt", "", files)) #how much you want to sub will depend on your naming scheme
 names(output) <- "Filename"
 output$Start_Time<-NA
 output$Start_Temp<-NA
@@ -17,7 +17,7 @@ output$Loss10<-NA
 
 for (i in 1:length(files)){
 	print(files[i])
-	file = read.table(col.names=c("Date","Time","AO","Tag","Tag_ID","Lat", "LatN", "Long", "LongW", "Temp"), fill=TRUE,  text=gsub("\xb0C|\xa1C|\xc1C","",readLines(files[file1][i])))	#removing degrees C symbol
+	file = read.table(col.names=c("Date","Time","AO","Tag","Tag_ID","Lat", "LatN", "Long", "LongW", "Temp"), fill=TRUE,  text=gsub("\xb0C|\xa1C|\xc1C","",readLines(files[i])))	#removing degrees C symbol
 	Tag = file$Tag_ID[1] #focus on first tag in the file
 	if (length(levels(file$Tag_ID))>1) {
 		file = file[file$Tag_ID==Tag | file$Tag_ID==sub("\\*", "",as.character(Tag)),] #remove other tags in file
@@ -26,7 +26,7 @@ for (i in 1:length(files)){
 	file$min_since_start = difftime(strptime(file$Time, "%H:%M:%S"), strptime(file$Time[1], "%H:%M:%S"), units="mins")
 		
 	#Plot the temp data
-  	pdf(paste("Plots/", sub(".txt", "", sub("*\\d*\\w\\w\\w2017_PIT_", "", files[i])), ".pdf"))
+  	pdf(paste("Plots/", sub(".txt", "", files[i]), ".pdf"))
 		plot(file$Temp~file$min_since_start, type="l", xlab="Time From Start (in mins)", ylab="Temp (deg C)")
 		abline(h=file$Temp[1]*0.90, col="red") #line for 10% of starting temp
 		abline(h=37, col="red", lty=2) #line for 37 deg C
@@ -51,7 +51,7 @@ for (i in 1:length(files)){
 	
 	#Calculate average temperature per minute
 	data2 = data.frame(seq(0,max(data$min_since_start))); names(data2)="Time" #create new df by min
-	data2$ID = sub(".txt", "", sub("*\\d*\\w\\w\\w2017_PIT_", "", files[i]))
+	data2$ID = sub(".txt", "", files[i])
 	data2$meanTemp = NA
 	for (k in 1:nrow(data2)){		
 		data2$meanTemp[k] = mean(data$meanTemp[data$min_since_start==data2$Time[k]], na.rm=TRUE)

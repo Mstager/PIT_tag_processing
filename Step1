@@ -1,22 +1,15 @@
-#Step 1: calculate per minute temp averages for each file, this assumes one individual per file (and ignores all other IDs)
-#Also, generate a summary table for each file. This is not super necessary but I just find it useful to identify weird stuff.
+#Pit tag processing with incorporation of ambient temperature using peltier temp data in Expedata file
 
-setwd("/PIT_tag")
-files = dir(pattern=".txt")
-dir.create("Plots")
+pheno <- read.csv("./Filename.csv") #file with phenotypic data for each individual that you might want to incorporate into survival models
 
-#First make a blank data frame for the output. It will include the time and duration for each trial, the Start and End temps, the number of samples collected, and when a 10% loss in body temp occurred
-output <- data.frame(sub(".txt", "", files)) #how much you want to sub will depend on your naming scheme
-names(output) <- "Filename"
-output$Start_Time<-NA
-output$Start_Temp<-NA
-output$Duration<-NA
-output$End_Temp<-NA
-output$Num_sample<-NA
-output$Loss10<-NA
+files = dir(path="./PIT_tag", pattern=".txt")
+pelt_files = dir(path=./"Peltier", pattern=".csv")
+
+dir.create("./Plots")
 
 for (i in 1:length(files)){
 	print(files[i])
+	ID = sub(".txt", "", files[i])
 	file = read.table(col.names=c("Date","Time","AO","Tag","Tag_ID","Lat", "LatN", "Long", "LongW", "Temp"), fill=TRUE,  text=gsub("\xb0C|\xa1C|\xc1C","",readLines(files[i])))	#removing degrees C symbol
 	Tag = file$Tag_ID[1] #focus on first tag in the file
 	if (length(levels(file$Tag_ID))>1) {
@@ -24,20 +17,17 @@ for (i in 1:length(files)){
 	}
  	
 	file$min_since_start = difftime(strptime(file$Time, "%H:%M:%S"), strptime(file$Time[1], "%H:%M:%S"), units="mins")
-		
-	#Plot the temp data
-  	pdf(paste("Plots/", sub(".txt", "", files[i]), ".pdf"))
-		plot(file$Temp~file$min_since_start, type="l", xlab="Time From Start (in mins)", ylab="Temp (deg C)")
-		abline(h=file$Temp[1]*0.90, col="red") #line for 10% of starting temp
-		abline(h=37, col="red", lty=2) #line for 37 deg C
-	dev.off()
 	
-	output$Start_Time[i]<-as.character(file$Time[1])
-	output$Start_Temp[i]<-file$Temp[1] #original PIT tag temp
-	if (is.na(file$Temp[1])){output$Start_Temp[i]<-file$Temp[2]} #sometimes the first reading is missing a temp
-	output$Duration[i]<- as.numeric(difftime(strptime(file$Time[nrow(file)], "%H:%M:%S"), strptime(file$Time[1], "%H:%M:%S"), units="mins")) #duration in minutes
-	output$End_Temp[i]<-file$Temp[nrow(file)] #ending PIT tag temp
-	output$Num_sample[i] <- nrow(file) #number of samples recorded
+	#Pull VO2max start and end times from phenotypic data file (this is only for plotting purposes, not necessary to have)
+	SMR_start = pheno$VO2max_start[pheno$ID==ID]/60 #these were saved in seconds
+	SMR_end = pheno$VO2max_end[pheno$ID==ID]/60
+	
+	#Plot the temp data
+  	pdf(paste("Plots/", ID, ".pdf"))
+		plot(file$Temp~file$min_since_start, type="l", xlab="Time From Start (in mins)", ylab="Temp (deg C)")
+		abline(h=file$Temp[1]*0.90, col="red") #line for 10% of starting temp		
+		abline(v=seq(from=SMR_start, to=SMR_end, by =0.1), col="gray") #shade VO2max region
+	dev.off()
 	
 	#Calculate average temperature per second (~8 readings per second)	
 	data = data.frame(unique(file$Time)); names(data)="Time"
@@ -46,18 +36,28 @@ for (i in 1:length(files)){
 		data$meanTemp[j] = mean(file$Temp[file$Time==unique(file$Time)[j]], na.rm=TRUE)
 	}
 	data$min_since_start = as.numeric(difftime(strptime(data$Time, "%H:%M"),strptime(data$Time[1], "%H:%M"), units="mins"))
-	output$Loss10[i] <- data$min_since_start[min(which(data$meanTemp < file$Temp[1]*0.90))]	
 	
-	#Calculate average temperature per minute
+	#Merge temperature cabinet data
+	pelt <- read.csv(pelt_files[grep(ID,pelt_files)])[,2] #peltier data with the same name, skip 1st col
+	data$Pelt <- pelt[(length(pelt)-nrow(data)+1):length(pelt)]
+		
+	#Calculate average temperature per minute (you could get rid of this if you find your files are short and you want per second)
 	data2 = data.frame(seq(0,max(data$min_since_start))); names(data2)="Time" #create new df by min
 	data2$ID = sub(".txt", "", files[i])
 	data2$meanTemp = NA
 	for (k in 1:nrow(data2)){		
 		data2$meanTemp[k] = mean(data$meanTemp[data$min_since_start==data2$Time[k]], na.rm=TRUE)
 		data2$Hypothermic[k] = data2$meanTemp[k] < file$Temp[1]*0.90 #when does temp fall 10%
-		data2$Hypothermic_37[k] = data2$meanTemp[k] < 36.95 #when does temp fall below 37
+		data2$Pelt[k] = mean(data$Pelt[data$min_since_start==data2$Time[k]], na.rm=TRUE)
 	}
-	write.table(data2, "coxph_data.csv", append=TRUE, row.names=FALSE, col.names=FALSE, sep=",") #export for coxph
+	
+	#Add phenotypic data using a column in your phenotypic data that matches the naming scheme on your PIT files
+	data2$Treatment = as.character(pheno$Treatment[pheno$ID==ID])
+	data2$Population = as.character(pheno$Population[pheno$ID==ID])
+	data2$VO2max = as.numeric(pheno$VO2max[pheno$ID==ID])
+	data2$lean = as.numeric(pheno$lean[pheno$ID==ID])
+	
+	#Export the subset of file over which individual is not hypothermic up until it first turns hypothermic for coxph models
+	data2 = data2[1:min(which(data2$Hypothermic=="TRUE")),]
+	write.table(data2, "coxph_data.csv", append=TRUE, row.names=FALSE, col.names=FALSE, sep=",")
 }
-output$Rate_of_change <- (output$Start_Temp-output$End_Temp)/output$Duration #rate of change throughout trial
-write.csv(output, "output.csv")

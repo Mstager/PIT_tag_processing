@@ -30,7 +30,6 @@ for (i in 1:length(files)){
 		plot(file$Temp~file$min_since_start, type="l", xlab="Time From Start (in mins)", ylab="Temp (deg C)")
 		abline(h=file$Temp[1]*0.90, col="red") #line for 10% of starting temp
 		abline(h=37, col="red", lty=2) #line for 37 deg C
-		abline(v=seq(from=SMR_start, to=SMR_end, by =0.1), col="gray") #where does VO2max occur (if you know this)
 	dev.off()
 	
 	output$Start_Time[i]<-as.character(file$Time[1])
